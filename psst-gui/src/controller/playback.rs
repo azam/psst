@@ -10,7 +10,7 @@ use druid::{
     Code, ExtEventSink, InternalLifeCycle, KbKey, WindowHandle,
 };
 use psst_core::{
-    audio::{normalize::NormalizationLevel, output::DefaultAudioOutput},
+    audio::{normalize::NormalizationLevel, output::AudioOutput},
     cache::Cache,
     cdn::Cdn,
     lastfm::LastFmClient,
@@ -25,18 +25,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     cmd,
-    data::Nav,
-    data::{
-        AppState, Config, NowPlaying, Playable, Playback, PlaybackOrigin, PlaybackState,
-        QueueBehavior, QueueEntry,
-    },
+    data::{config::AudioBackend, AppState, Config, Nav, NowPlaying, Playable, Playback, PlaybackOrigin, PlaybackState, QueueBehavior, QueueEntry},
     ui::lyrics,
 };
 
 pub struct PlaybackController {
     sender: Option<Sender<PlayerEvent>>,
     thread: Option<JoinHandle<()>>,
-    output: Option<DefaultAudioOutput>,
+    output: Option<Box<dyn AudioOutput>>,
     media_controls: Option<MediaControls>,
     has_scrobbled: bool,
     scrobbler: Option<Scrobbler>,
@@ -88,8 +84,9 @@ impl PlaybackController {
         event_sink: ExtEventSink,
         widget_id: WidgetId,
         #[allow(unused_variables)] window: &WindowHandle,
+        audio_backend: AudioBackend,
     ) {
-        let output = DefaultAudioOutput::open().unwrap();
+        let output = audio_backend.open().unwrap();
         let cache_dir = Config::cache_dir().unwrap();
         let proxy_url = Config::proxy();
         let player = Player::new(
@@ -596,6 +593,7 @@ where
                     ctx.get_external_handle(),
                     ctx.widget_id(),
                     ctx.window(),
+                    data.config.audio_backend,
                 );
 
                 // Initialize values loaded from the config.

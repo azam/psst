@@ -14,29 +14,27 @@ use crate::{
 pub struct CubebOutput {
     #[allow(unused)]
     handle: ActorHandle<StreamMsg>,
-    sink: CubebSink,
+    sink: Box<CubebSink>,
 }
 
 impl CubebOutput {
-    pub fn open() -> Result<Self, Error> {
+    pub fn open() -> Result<Box<dyn AudioOutput>, Error> {
         let (callback_send, callback_recv) = bounded(16);
 
         let handle = Stream::spawn_with_default_cap("audio_output", {
             move |_| Stream::open(callback_recv).unwrap()
         });
-        let sink = CubebSink {
+        let sink = Box::new(CubebSink {
             callback_send,
             stream_send: handle.sender(),
-        };
+        });
 
-        Ok(Self { handle, sink })
+        Ok(Box::new(Self { handle, sink }))
     }
 }
 
 impl AudioOutput for CubebOutput {
-    type Sink = CubebSink;
-
-    fn sink(&self) -> Self::Sink {
+    fn sink(&self) -> Box<dyn AudioSink> {
         self.sink.clone()
     }
 }
@@ -161,9 +159,9 @@ impl AudioSink for CubebSink {
         self.stream_send.send(StreamMsg::SetVolume(volume)).unwrap();
     }
 
-    fn play(&self, source: impl AudioSource) {
+    fn play(&self, source: Box<dyn AudioSource>) {
         self.callback_send
-            .send(CallbackMsg::PlaySource(Box::new(source)))
+            .send(CallbackMsg::PlaySource(source))
             .unwrap()
     }
 

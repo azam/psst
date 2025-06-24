@@ -2,6 +2,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use crate::data::config::AUDIO_BACKENDS;
 use crate::{
     cmd,
     data::{
@@ -216,6 +217,19 @@ fn general_tab_widget() -> impl Widget<AppState> {
         );
 
     col = col.with_spacer(theme::grid(3.0));
+
+    // Audio output
+    col = col
+        .with_child(Label::new("Audio output").with_font(theme::UI_FONT_MEDIUM))
+        .with_spacer(theme::grid(2.0))
+        .with_child({
+            RadioGroup::column(AUDIO_BACKENDS.iter().map(|backend| {
+                (backend.to_string(), *backend)
+            }))
+                .lens(AppState::config.then(Config::audio_backend))
+        });
+
+    col = col.with_spacer(theme::grid(1.5));
 
     // Sliders
     col = col

@@ -49,24 +49,24 @@ enum PipewireMsg {
 
 pub struct PipewireOutput {
     _mainloop_handle: JoinHandle<Result<(), Error>>,
-    sink: PipewireSink,
+    sink: Box<PipewireSink>,
 }
 
 impl PipewireOutput {
-    pub fn open() -> Result<Self, Error> {
+    pub fn open() -> Result<Box<dyn AudioOutput>, Error> {
         info!("opening audio output: pipewire");
         pipewire::init();
         let (mainloop_send, mainloop_recv) = pipewire::channel::channel::<PipewireMsg>();
         let _mainloop_handle = std::thread::spawn(move || Self::run(mainloop_recv));
-        let sink = PipewireSink {
+        let sink = Box::new(PipewireSink {
             channel_count: DEFAULT_CHANNEL_COUNT,
             sample_rate: DEFAULT_SAMPLE_RATE,
             mainloop_send,
-        };
-        Ok(Self {
+        });
+        Ok(Box::new(Self {
             _mainloop_handle,
             sink,
-        })
+        }))
     }
 
     fn run(mainloop_recv: pipewire::channel::Receiver<PipewireMsg>) -> Result<(), Error> {
@@ -309,9 +309,7 @@ impl PipewireOutput {
 }
 
 impl AudioOutput for PipewireOutput {
-    type Sink = PipewireSink;
-
-    fn sink(&self) -> Self::Sink {
+    fn sink(&self) -> Box<dyn AudioSink> {
         self.sink.clone()
     }
 }
@@ -344,8 +342,8 @@ impl AudioSink for PipewireSink {
         self.send(PipewireMsg::SetVolume(volume));
     }
 
-    fn play(&self, source: impl AudioSource) {
-        self.send(PipewireMsg::Play(Box::new(source)));
+    fn play(&self, source: Box<dyn AudioSource>) {
+        self.send(PipewireMsg::Play(source));
     }
 
     fn pause(&self) {

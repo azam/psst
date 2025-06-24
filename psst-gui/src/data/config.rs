@@ -1,5 +1,6 @@
 use std::{
     env::{self, VarError},
+    fmt::Display,
     fs::{self, File, OpenOptions},
     io::{BufReader, BufWriter},
     path::{Path, PathBuf},
@@ -11,10 +12,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use druid::{Data, Lens, Size};
 use platform_dirs::AppDirs;
 use psst_core::{
-    cache::{mkdir_if_not_exists, CacheHandle},
-    connection::Credentials,
-    player::PlaybackConfig,
-    session::{SessionConfig, SessionConnection},
+    audio::output::{AudioOutput, Backend}, cache::{mkdir_if_not_exists, CacheHandle}, connection::Credentials, player::PlaybackConfig, session::{SessionConfig, SessionConnection}
 };
 use serde::{Deserialize, Serialize};
 
@@ -112,6 +110,7 @@ pub struct Config {
     credentials: Option<Credentials>,
     pub audio_quality: AudioQuality,
     pub theme: Theme,
+    pub audio_backend: AudioBackend,
     pub volume: f64,
     pub last_route: Option<Nav>,
     pub queue_behavior: QueueBehavior,
@@ -134,6 +133,7 @@ impl Default for Config {
             credentials: Default::default(),
             audio_quality: Default::default(),
             theme: Default::default(),
+            audio_backend: Default::default(),
             volume: 1.0,
             last_route: Default::default(),
             queue_behavior: Default::default(),
@@ -322,4 +322,76 @@ fn get_dir_size(path: &Path) -> Option<u64> {
         };
         Some(acc + size)
     })
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Data, Serialize, Deserialize)]
+pub enum AudioBackend {
+    #[cfg(feature = "cpal")]
+    Cpal,
+    #[cfg(feature = "cubeb")]
+    Cubeb,
+    #[cfg(feature = "pipewire")]
+    Pipewire,
+}
+
+pub const AUDIO_BACKENDS: &[AudioBackend] = &[
+    #[cfg(feature = "cpal")]
+    AudioBackend::Cpal,
+    #[cfg(feature = "cubeb")]
+    AudioBackend::Cubeb,
+    #[cfg(feature = "pipewire")]
+    AudioBackend::Pipewire,
+];
+
+impl AudioBackend {
+    pub fn open(&self) -> Result<Box<dyn AudioOutput>, psst_core::error::Error> {
+        match self {
+            #[cfg(feature = "cpal")]
+            AudioBackend::Cpal => Backend::Cpal.open(),
+            #[cfg(feature = "cubeb")]
+            AudioBackend::Cubeb => Backend::Cubeb.open(),
+            #[cfg(feature = "pipewire")]
+            AudioBackend::Pipewire => Backend::Pipewire.open(),
+            #[allow(unreachable_patterns)]
+            _ => panic!("no audio output backend is available"),
+        }
+    }
+}
+
+impl Default for AudioBackend {
+    fn default() -> Self {
+        return AudioBackend::from(Backend::default());
+    }
+}
+
+impl From<Backend> for AudioBackend {
+    fn from(backend: Backend) -> Self {
+        match backend {
+            #[cfg(feature = "cpal")]
+            Backend::Cpal => AudioBackend::Cpal,
+            #[cfg(feature = "cubeb")]
+            Backend::Cubeb => AudioBackend::Cubeb,
+            #[cfg(feature = "pipewire")]
+            Backend::Pipewire => AudioBackend::Pipewire,
+        }
+    }
+}
+
+impl From<AudioBackend> for Backend {
+    fn from(backend: AudioBackend) -> Self {
+        match backend {
+            #[cfg(feature = "cpal")]
+            AudioBackend::Cpal => Backend::Cpal,
+            #[cfg(feature = "cubeb")]
+            AudioBackend::Cubeb => Backend::Cubeb,
+            #[cfg(feature = "pipewire")]
+            AudioBackend::Pipewire => Backend::Pipewire,
+        }
+    }
+}
+
+impl Display for AudioBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Backend::from(*self).fmt(f)
+    }
 }
